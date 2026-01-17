@@ -21,7 +21,7 @@ st.set_page_config(
     page_title="LeRobot Dataset Evaluator",
     page_icon="",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # Apply centralized CSS
@@ -56,6 +56,9 @@ def initialize_session_state():
 
     if 'consistency_results' not in st.session_state:
         st.session_state.consistency_results = None
+
+    if 'success_indicator_results' not in st.session_state:
+        st.session_state.success_indicator_results = None
 
     if 'metrics_computed' not in st.session_state:
         st.session_state.metrics_computed = False
@@ -152,84 +155,162 @@ def render_sidebar():
 
 
 def render_home_page():
-    """Render home page with welcome message."""
-    render_page_header(
-        "LeRobot Dataset Evaluator",
-        "Evaluate dataset quality before training your ACT models"
-    )
-
-    st.markdown("---")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.markdown("### Comprehensive Metrics")
-        st.markdown("""
-        - Spatial coverage and diversity
-        - Execution quality (teleoperation-calibrated)
-        - Data consistency and anomaly detection
-        - Success indicators
-        """)
-
-    with col2:
-        st.markdown("### Save Time")
-        st.markdown("""
-        - Identify data issues early
-        - Avoid wasting training time
-        - Get actionable recommendations
-        - Optimize data collection
-        """)
-
-    with col3:
-        st.markdown("### Easy to Use")
-        st.markdown("""
-        - Load from HuggingFace Hub
-        - Interactive visualizations
-        - Comprehensive reports
-        - Video playback
-        """)
-
-    st.markdown("---")
-
-    # Instructions
-    st.markdown("### Getting Started")
-
+    """Render home page with modern app-like design."""
+    # Hero Section
     st.markdown("""
-    1. **Configure** your dataset in the sidebar (left)
-    2. **Enter** your HuggingFace account and dataset name
-    3. **Select** your robot type and analysis options
-    4. **Click** the "Load Dataset" button
-    5. **Explore** the evaluation results in different pages
-    """)
+    <div style="text-align: center; padding: 3rem 0 2rem 0;">
+        <h1 style="font-size: 3rem; font-weight: 700; color: #F8FAFC; margin-bottom: 0.5rem; letter-spacing: -0.02em;">
+            LeRobot Dataset Evaluator
+        </h1>
+        <p style="font-size: 1.25rem; color: #94A3B8; max-width: 600px; margin: 0 auto;">
+            Analyze your robotics datasets before training. Catch issues early, save compute time.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.markdown("---")
-
-    # Quick stats (if dataset loaded)
+    # If dataset is loaded, show stats prominently
     if st.session_state.dataset_loaded and st.session_state.metadata:
-        st.markdown("### Dataset Overview")
-
         metadata = st.session_state.metadata
 
-        col1, col2, col3, col4 = st.columns(4)
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, #1E3A5F 0%, #1E293B 100%); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; border: 1px solid #334155;">
+            <h3 style="color: #F8FAFC; margin: 0 0 1rem 0; font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em;">Currently Loaded</h3>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1:
+            st.metric("Dataset", st.session_state.dataset_id.split('/')[-1] if st.session_state.dataset_id else "N/A")
+        with col2:
+            st.metric("Episodes", metadata.get('total_episodes', 'N/A'))
+        with col3:
+            st.metric("Frames", f"{metadata.get('total_frames', 0):,}")
+        with col4:
+            st.metric("FPS", metadata.get('fps', 'N/A'))
+        with col5:
+            avg_length = metadata.get('total_frames', 0) / max(metadata.get('total_episodes', 1), 1)
+            st.metric("Avg Length", f"{avg_length:.0f}")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+    # Dataset Loader Section (inline, not sidebar)
+    if not st.session_state.dataset_loaded:
+        st.markdown("""
+        <div style="background: #1E293B; border-radius: 12px; padding: 2rem; margin-bottom: 2rem; border: 1px solid #334155;">
+            <h3 style="color: #F8FAFC; margin: 0 0 0.5rem 0;">Load a Dataset</h3>
+            <p style="color: #94A3B8; margin: 0 0 1.5rem 0;">Enter your HuggingFace dataset details to begin analysis.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col1, col2 = st.columns([2, 1])
 
         with col1:
-            st.metric("Total Episodes", metadata.get('total_episodes', 'N/A'))
+            subcol1, subcol2 = st.columns(2)
+            with subcol1:
+                hf_account = st.text_input(
+                    "HuggingFace Account",
+                    value=get_config().hf_account,
+                    placeholder="your-username"
+                )
+            with subcol2:
+                dataset_name = st.text_input(
+                    "Dataset Name",
+                    value="",
+                    placeholder="dataset-name"
+                )
+
+            if hf_account and dataset_name:
+                st.caption(f"Full ID: `{hf_account}/{dataset_name}`")
 
         with col2:
-            st.metric("Total Frames", metadata.get('total_frames', 'N/A'))
+            robot_type = st.selectbox(
+                "Robot Type",
+                options=['generic_6dof', 'ur5', 'panda', 'so-arm100'],
+                index=0
+            )
 
-        with col3:
-            st.metric("FPS", metadata.get('fps', 'N/A'))
+        # Advanced options in expander
+        with st.expander("Advanced Options"):
+            adv_col1, adv_col2, adv_col3 = st.columns(3)
+            with adv_col1:
+                max_episodes = st.number_input(
+                    "Max Episodes",
+                    min_value=1,
+                    max_value=10000,
+                    value=100
+                )
+            with adv_col2:
+                sampling_strategy = st.selectbox(
+                    "Sampling",
+                    options=['auto', 'all', 'random', 'sequential'],
+                    index=0
+                )
+            with adv_col3:
+                use_streaming = st.checkbox("Streaming Mode", value=True)
 
-        with col4:
-            avg_length = metadata.get('total_frames', 0) / max(metadata.get('total_episodes', 1), 1)
-            st.metric("Avg Episode Length", f"{avg_length:.1f}")
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Load button
+        dataset_id = f"{hf_account}/{dataset_name}" if hf_account and dataset_name else None
+        if st.button("Load Dataset", type="primary", use_container_width=True, disabled=(dataset_id is None)):
+            if dataset_id:
+                load_dataset(dataset_id, max_episodes, sampling_strategy, use_streaming)
+                st.rerun()
+
+    # Feature Cards
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.markdown("""
+        <div style="background: #1E293B; border-radius: 8px; padding: 1.5rem; height: 100%; border: 1px solid #334155;">
+            <div style="color: #3B82F6; font-size: 1.5rem; margin-bottom: 0.75rem;">01</div>
+            <h4 style="color: #F8FAFC; margin: 0 0 0.5rem 0;">Execution Quality</h4>
+            <p style="color: #94A3B8; font-size: 0.875rem; margin: 0;">
+                Teleoperation-calibrated metrics for movement smoothness, hesitation, and control quality.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("""
+        <div style="background: #1E293B; border-radius: 8px; padding: 1.5rem; height: 100%; border: 1px solid #334155;">
+            <div style="color: #059669; font-size: 1.5rem; margin-bottom: 0.75rem;">02</div>
+            <h4 style="color: #F8FAFC; margin: 0 0 0.5rem 0;">Spatial Coverage</h4>
+            <p style="color: #94A3B8; font-size: 0.875rem; margin: 0;">
+                3D workspace analysis, position diversity, and exploration uniformity metrics.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown("""
+        <div style="background: #1E293B; border-radius: 8px; padding: 1.5rem; height: 100%; border: 1px solid #334155;">
+            <div style="color: #D97706; font-size: 1.5rem; margin-bottom: 0.75rem;">03</div>
+            <h4 style="color: #F8FAFC; margin: 0 0 0.5rem 0;">Data Consistency</h4>
+            <p style="color: #94A3B8; font-size: 0.875rem; margin: 0;">
+                Anomaly detection, temporal alignment, and data completeness checks.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        st.markdown("""
+        <div style="background: #1E293B; border-radius: 8px; padding: 1.5rem; height: 100%; border: 1px solid #334155;">
+            <div style="color: #DC2626; font-size: 1.5rem; margin-bottom: 0.75rem;">04</div>
+            <h4 style="color: #F8FAFC; margin: 0 0 0.5rem 0;">Recommendations</h4>
+            <p style="color: #94A3B8; font-size: 0.875rem; margin: 0;">
+                Actionable insights prioritized by impact to improve your dataset quality.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
     # Footer
-    st.markdown("---")
+    st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown(
-        '<div style="text-align: center; color: #64748B; font-size: 0.9rem;">'
-        'Built for robotics researchers by SentientNapkin | Powered by LeRobot and Streamlit'
+        '<div style="text-align: center; color: #64748B; font-size: 0.85rem; padding: 2rem 0;">'
+        'Built by Sebastian Vargas'
         '</div>',
         unsafe_allow_html=True
     )
@@ -351,11 +432,11 @@ def render_motion_quality_page():
 
     # Check if dataset is loaded and preprocessed
     if not st.session_state.dataset_loaded:
-        st.warning("Please load a dataset first from the sidebar.")
+        st.warning("Please load a dataset first from the Overview page.")
         return
 
     if not st.session_state.get('data_preprocessing_complete', False):
-        st.error("Episodes not preprocessed. Please reload the dataset from the sidebar.")
+        st.error("Episodes not preprocessed. Please reload the dataset from the Overview page.")
         return
 
     # Compute execution quality metrics if not already done
@@ -732,11 +813,11 @@ def render_spatial_coverage_page():
     st.markdown("---")
 
     if not st.session_state.dataset_loaded:
-        st.warning("Please load a dataset first from the sidebar.")
+        st.warning("Please load a dataset first from the Overview page.")
         return
 
     if not st.session_state.get('data_preprocessing_complete', False):
-        st.error("Episodes not preprocessed. Please reload the dataset from the sidebar.")
+        st.error("Episodes not preprocessed. Please reload the dataset from the Overview page.")
         return
 
     # Compute spatial coverage if not already done
@@ -1067,11 +1148,11 @@ def render_data_consistency_page():
     st.markdown("---")
 
     if not st.session_state.dataset_loaded:
-        st.warning("Please load a dataset first from the sidebar.")
+        st.warning("Please load a dataset first from the Overview page.")
         return
 
     if not st.session_state.get('data_preprocessing_complete', False):
-        st.error("Episodes not preprocessed. Please reload the dataset from the sidebar.")
+        st.error("Episodes not preprocessed. Please reload the dataset from the Overview page.")
         return
 
     # Compute consistency if not already done
@@ -1212,33 +1293,763 @@ def render_data_consistency_page():
         )
 
 
+def render_video_playback_page():
+    """Render video playback page with trajectory visualization."""
+    render_page_header(
+        "Trajectory Playback",
+        "Visualize and explore episode trajectories"
+    )
+
+    st.markdown("---")
+
+    if not st.session_state.dataset_loaded:
+        st.warning("Please load a dataset first from the Overview page.")
+        return
+
+    if not st.session_state.get('data_preprocessing_complete', False):
+        st.error("Episodes not preprocessed. Please reload the dataset from the Overview page.")
+        return
+
+    episodes_data = st.session_state.episodes_data
+    n_episodes = len(episodes_data)
+
+    # Episode selector
+    render_section_header("Episode Selection")
+
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        selected_episode = st.selectbox(
+            "Select Episode",
+            options=list(range(n_episodes)),
+            format_func=lambda x: f"Episode {x} ({len(episodes_data[x].get('states', []))} frames)",
+            key="video_episode_selector"
+        )
+
+    with col2:
+        episode_data = episodes_data[selected_episode]
+        n_frames = len(episode_data.get('states', []))
+        st.metric("Total Frames", n_frames)
+
+    # Frame slider
+    if n_frames > 0:
+        current_frame = st.slider(
+            "Frame",
+            min_value=0,
+            max_value=n_frames - 1,
+            value=0,
+            key="video_frame_slider"
+        )
+    else:
+        current_frame = 0
+
+    st.markdown("---")
+
+    # Trajectory visualization
+    try:
+        from src.visualizations.trajectory_playback import create_trajectory_dashboard
+
+        figures = create_trajectory_dashboard(episode_data, current_frame)
+
+        # Main tabs
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "3D Trajectory",
+            "State Timeline",
+            "Action Timeline",
+            "Animated Playback",
+            "Camera Playback"
+        ])
+
+        with tab1:
+            render_section_header("3D Trajectory Visualization")
+
+            if 'trajectory_3d' in figures:
+                st.plotly_chart(figures['trajectory_3d'], use_container_width=True)
+
+                # Position info
+                states = np.array(episode_data.get('states', []))
+                if len(states) > 0:
+                    current_state = states[min(current_frame, len(states)-1)]
+                    n_dims = len(current_state) if hasattr(current_state, '__len__') else 1
+
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("X Position", f"{current_state[0]:.4f}" if n_dims >= 1 else "N/A")
+                    with col2:
+                        st.metric("Y Position", f"{current_state[1]:.4f}" if n_dims >= 2 else "N/A")
+                    with col3:
+                        st.metric("Z Position", f"{current_state[2]:.4f}" if n_dims >= 3 else "N/A")
+
+            if 'velocity_profile' in figures:
+                st.markdown("#### Velocity Profile")
+                st.plotly_chart(figures['velocity_profile'], use_container_width=True)
+
+        with tab2:
+            render_section_header("State Evolution Over Time")
+
+            if 'state_timeline' in figures:
+                st.plotly_chart(figures['state_timeline'], use_container_width=True)
+
+            # State statistics
+            states = np.array(episode_data.get('states', []))
+            if len(states) > 0:
+                st.markdown("#### State Statistics")
+                import pandas as pd
+
+                n_dims = states.shape[1] if len(states.shape) > 1 else 1
+                stats_data = []
+                for i in range(min(n_dims, 6)):
+                    dim_data = states[:, i] if n_dims > 1 else states
+                    stats_data.append({
+                        'Dimension': f"Dim {i+1}",
+                        'Mean': f"{np.mean(dim_data):.4f}",
+                        'Std': f"{np.std(dim_data):.4f}",
+                        'Min': f"{np.min(dim_data):.4f}",
+                        'Max': f"{np.max(dim_data):.4f}"
+                    })
+
+                stats_df = pd.DataFrame(stats_data)
+                st.dataframe(stats_df, use_container_width=True, hide_index=True)
+
+        with tab3:
+            render_section_header("Action Evolution Over Time")
+
+            if 'action_timeline' in figures:
+                st.plotly_chart(figures['action_timeline'], use_container_width=True)
+
+            # Action statistics
+            actions = np.array(episode_data.get('actions', []))
+            if len(actions) > 0:
+                st.markdown("#### Action Statistics")
+                import pandas as pd
+
+                n_dims = actions.shape[1] if len(actions.shape) > 1 else 1
+                stats_data = []
+                for i in range(min(n_dims, 6)):
+                    dim_data = actions[:, i] if n_dims > 1 else actions
+                    stats_data.append({
+                        'Dimension': f"Action {i+1}",
+                        'Mean': f"{np.mean(dim_data):.4f}",
+                        'Std': f"{np.std(dim_data):.4f}",
+                        'Min': f"{np.min(dim_data):.4f}",
+                        'Max': f"{np.max(dim_data):.4f}"
+                    })
+
+                stats_df = pd.DataFrame(stats_data)
+                st.dataframe(stats_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No action data available for this episode.")
+
+        with tab4:
+            render_section_header("Animated Trajectory Playback")
+
+            if 'animated_trajectory' in figures:
+                st.markdown("""
+                **Controls:**
+                - Click **Play** to start the animation
+                - Click **Pause** to stop
+                - Use the slider below the plot to jump to specific frames
+                """)
+                st.plotly_chart(figures['animated_trajectory'], use_container_width=True)
+            else:
+                st.info("Animation not available for this episode.")
+
+        with tab5:
+            render_section_header("Camera Playback")
+
+            # Get loader and check for cameras
+            loader = st.session_state.get('loader')
+            if loader is None:
+                st.warning("Dataset loader not available.")
+            elif not hasattr(loader, 'get_camera_names'):
+                st.warning("Please restart the Streamlit app to enable camera playback (new features require app restart).")
+            else:
+                try:
+                    # Cache camera names in session state (only detect once)
+                    if 'available_cameras' not in st.session_state:
+                        with st.spinner("Detecting cameras..."):
+                            st.session_state.available_cameras = loader.get_camera_names()
+
+                    camera_names = st.session_state.available_cameras
+
+                    if not camera_names:
+                        st.info("No camera data found in this dataset.")
+                    else:
+                        st.success(f"Found {len(camera_names)} camera(s): {', '.join(camera_names)}")
+
+                        # Get the global frame indices for this episode
+                        episode_idx = episodes_data[selected_episode]['episode_index']
+                        frame_indices = loader.get_episode_frame_indices(episode_idx)
+
+                        if frame_indices and current_frame < len(frame_indices):
+                            global_frame_idx = frame_indices[current_frame]
+
+                            # Load only the current frame's images (on-demand)
+                            frame_images = loader.get_frame_images(global_frame_idx, camera_names)
+
+                            if frame_images:
+                                # Display cameras in columns
+                                n_cameras = len(frame_images)
+                                if n_cameras == 1:
+                                    cols = [st.container()]
+                                elif n_cameras == 2:
+                                    cols = st.columns(2)
+                                else:
+                                    cols = st.columns(min(n_cameras, 3))
+
+                                for i, (cam_name, img) in enumerate(frame_images.items()):
+                                    col_idx = i % len(cols)
+                                    with cols[col_idx]:
+                                        st.markdown(f"**{cam_name}**")
+                                        st.image(
+                                            img,
+                                            caption=f"Frame {current_frame + 1}/{n_frames}",
+                                            use_container_width=True
+                                        )
+
+                                # Frame info
+                                st.markdown("---")
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("Current Frame", current_frame + 1)
+                                with col2:
+                                    st.metric("Total Frames", n_frames)
+                                with col3:
+                                    if n_frames > 0:
+                                        progress = (current_frame + 1) / n_frames * 100
+                                        st.metric("Progress", f"{progress:.1f}%")
+
+                                st.caption("Use the frame slider above to scrub through the video.")
+                            else:
+                                st.warning("Could not load images for this frame.")
+                        else:
+                            st.warning("Frame indices not available for this episode.")
+
+                except Exception as e:
+                    error_msg = str(e)
+                    # Check for FFmpeg/torchcodec error
+                    if 'torchcodec' in error_msg.lower() or 'ffmpeg' in error_msg.lower() or 'libtorchcodec' in error_msg.lower():
+                        st.error("**FFmpeg 7 Required for Video Playback**")
+                        st.markdown("""
+                        Camera playback requires FFmpeg (version 4-7) to decode video data from LeRobot datasets.
+
+                        **Note:** FFmpeg 8 is NOT supported. You need version 7 or earlier.
+
+                        **To install FFmpeg 7 on macOS:**
+                        ```bash
+                        brew install ffmpeg@7
+                        brew link ffmpeg@7 --force
+                        ```
+
+                        **On Ubuntu/Debian:**
+                        ```bash
+                        sudo apt-get install ffmpeg
+                        ```
+
+                        After installing, restart the Streamlit app.
+                        """)
+                    else:
+                        st.error(f"Error loading camera data: {error_msg}")
+                    logger.error(f"Camera playback error: {e}", exc_info=True)
+
+    except Exception as e:
+        st.error(f"Visualization error: {str(e)}")
+        logger.error(f"Trajectory visualization error: {e}", exc_info=True)
+
+    st.markdown("---")
+
+    # Episode info
+    render_section_header("Episode Information")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("Episode Index", selected_episode)
+
+    with col2:
+        st.metric("Total Frames", n_frames)
+
+    with col3:
+        # Calculate duration if timestamps available
+        timestamps = episode_data.get('timestamps')
+        if timestamps is not None and len(timestamps) > 1:
+            duration = timestamps[-1] - timestamps[0]
+            st.metric("Duration", f"{duration:.2f}s")
+        else:
+            st.metric("Duration", f"{n_frames / 30:.2f}s (est.)")
+
+    with col4:
+        states = episode_data.get('states', [])
+        n_dims = states[0].shape[0] if len(states) > 0 and hasattr(states[0], 'shape') else len(states[0]) if len(states) > 0 else 0
+        st.metric("State Dimensions", n_dims)
+
+
+def render_success_indicators_page():
+    """Render success indicators analysis page."""
+    render_page_header(
+        "Success Indicators",
+        "Episode-level success analysis and quality distribution"
+    )
+
+    st.markdown("---")
+
+    if not st.session_state.dataset_loaded:
+        st.warning("Please load a dataset first from the Overview page.")
+        return
+
+    if not st.session_state.get('data_preprocessing_complete', False):
+        st.error("Episodes not preprocessed. Please reload the dataset from the Overview page.")
+        return
+
+    # Compute success indicators if not already done
+    if st.session_state.success_indicator_results is None:
+        with st.spinner("Analyzing success indicators..."):
+            try:
+                from src.metrics.success_indicators import SuccessIndicatorAnalyzer
+
+                analyzer = SuccessIndicatorAnalyzer()
+
+                # Get motion quality results if available for quality scores
+                motion_results = st.session_state.get('motion_quality_results')
+                spatial_results = st.session_state.get('spatial_coverage_results')
+
+                results = analyzer.analyze_success_indicators(
+                    st.session_state.episodes_data,
+                    motion_quality_results=motion_results,
+                    spatial_coverage_results=spatial_results
+                )
+
+                st.session_state.success_indicator_results = results
+
+            except Exception as e:
+                st.error(f"Failed to analyze success indicators: {str(e)}")
+                logger.error(f"Success indicator error: {e}", exc_info=True)
+                return
+
+    results = st.session_state.success_indicator_results
+
+    # Section 1: Overview metrics
+    render_section_header("Success Overview")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    success_rates = results['success_rates']
+
+    with col1:
+        success_pct = success_rates['overall_percentage']
+        color = "#059669" if success_pct >= 70 else "#D97706" if success_pct >= 50 else "#DC2626"
+        st.markdown(f"""
+        <div style="text-align: center; padding: 1rem; background: #1E293B; border-radius: 8px;">
+            <div style="font-size: 2rem; font-weight: 700; color: {color};">
+                {success_pct:.1f}%
+            </div>
+            <div style="color: #94A3B8; font-size: 0.875rem;">Success Rate</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.metric("Total Episodes", results['n_episodes'])
+
+    with col3:
+        st.metric("Successful Episodes", success_rates['n_successful'])
+
+    with col4:
+        length_stats = results['length_stats']
+        st.metric("Avg Length", f"{length_stats['mean']:.0f} frames")
+
+    st.markdown("---")
+
+    # Section 2: Quality Classification
+    render_section_header("Quality Classification")
+
+    col1, col2, col3, col4 = st.columns(4)
+    counts = success_rates['counts']
+    percentages = success_rates['percentages']
+
+    with col1:
+        st.markdown(f"""
+        <div style="background: rgba(5, 150, 105, 0.2); padding: 1rem; border-radius: 8px; border-left: 4px solid #059669;">
+            <div style="font-size: 1.5rem; font-weight: 600; color: #059669;">{counts['excellent']}</div>
+            <div style="color: #94A3B8;">Excellent ({percentages['excellent']:.1f}%)</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(f"""
+        <div style="background: rgba(8, 145, 178, 0.2); padding: 1rem; border-radius: 8px; border-left: 4px solid #0891B2;">
+            <div style="font-size: 1.5rem; font-weight: 600; color: #0891B2;">{counts['good']}</div>
+            <div style="color: #94A3B8;">Good ({percentages['good']:.1f}%)</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown(f"""
+        <div style="background: rgba(217, 119, 6, 0.2); padding: 1rem; border-radius: 8px; border-left: 4px solid #D97706;">
+            <div style="font-size: 1.5rem; font-weight: 600; color: #D97706;">{counts['marginal']}</div>
+            <div style="color: #94A3B8;">Marginal ({percentages['marginal']:.1f}%)</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        st.markdown(f"""
+        <div style="background: rgba(220, 38, 38, 0.2); padding: 1rem; border-radius: 8px; border-left: 4px solid #DC2626;">
+            <div style="font-size: 1.5rem; font-weight: 600; color: #DC2626;">{counts['poor']}</div>
+            <div style="color: #94A3B8;">Poor ({percentages['poor']:.1f}%)</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # Section 3: Visualizations
+    render_section_header("Visualizations")
+
+    try:
+        from src.visualizations.success_viz import create_success_dashboard
+
+        figures = create_success_dashboard(results)
+
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "Distribution",
+            "Quality Analysis",
+            "Best/Worst Episodes",
+            "Correlations"
+        ])
+
+        with tab1:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.plotly_chart(figures['length_histogram'], use_container_width=True)
+            with col2:
+                st.plotly_chart(figures['success_rate_pie'], use_container_width=True)
+
+            st.plotly_chart(figures['classification_bar'], use_container_width=True)
+
+        with tab2:
+            st.plotly_chart(figures['quality_distribution'], use_container_width=True)
+            st.plotly_chart(figures['quality_scatter'], use_container_width=True)
+
+        with tab3:
+            st.plotly_chart(figures['best_worst'], use_container_width=True)
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("#### Best Performing Episodes")
+                import pandas as pd
+                best_df = pd.DataFrame(results['best_episodes'])
+                best_df.columns = ['Episode', 'Quality', 'Length', 'Classification']
+                st.dataframe(best_df, use_container_width=True, hide_index=True)
+
+            with col2:
+                st.markdown("#### Worst Performing Episodes")
+                worst_df = pd.DataFrame(results['worst_episodes'])
+                worst_df.columns = ['Episode', 'Quality', 'Length', 'Classification']
+                st.dataframe(worst_df, use_container_width=True, hide_index=True)
+
+        with tab4:
+            st.plotly_chart(figures['correlation'], use_container_width=True)
+
+            correlation = results['length_quality_correlation']
+            st.info(f"**Interpretation:** {correlation['interpretation']}")
+
+    except Exception as e:
+        st.error(f"Visualization error: {str(e)}")
+        logger.error(f"Success visualization error: {e}", exc_info=True)
+
+    st.markdown("---")
+
+    # Section 4: Length Statistics
+    render_section_header("Episode Length Statistics")
+
+    length_stats = results['length_stats']
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    with col1:
+        st.metric("Mean", f"{length_stats['mean']:.1f}")
+    with col2:
+        st.metric("Median", f"{length_stats['median']:.1f}")
+    with col3:
+        st.metric("Std Dev", f"{length_stats['std']:.1f}")
+    with col4:
+        st.metric("Min", length_stats['min'])
+    with col5:
+        st.metric("Max", length_stats['max'])
+
+    st.caption(f"25th percentile: {length_stats['q25']:.0f} | 75th percentile: {length_stats['q75']:.0f}")
+
+    # Insights
+    st.markdown("---")
+    render_section_header("Key Insights")
+
+    success_pct = success_rates['overall_percentage']
+    if success_pct >= 70:
+        render_alert(
+            title="Strong success rate!",
+            message=f"{success_pct:.1f}% of episodes meet quality thresholds. Dataset is well-suited for training.",
+            alert_type="success"
+        )
+    elif success_pct >= 50:
+        render_alert(
+            title="Moderate success rate",
+            message=f"{success_pct:.1f}% of episodes meet quality thresholds. Consider reviewing lower-quality episodes.",
+            alert_type="info"
+        )
+    else:
+        render_alert(
+            title="Low success rate",
+            message=f"Only {success_pct:.1f}% of episodes meet quality thresholds. Review recommendations for improvement.",
+            alert_type="warning"
+        )
+
+
+def render_recommendations_page():
+    """Render recommendations page with prioritized suggestions."""
+    render_page_header(
+        "Recommendations",
+        "Actionable suggestions to improve your dataset quality"
+    )
+
+    st.markdown("---")
+
+    if not st.session_state.dataset_loaded:
+        st.warning("Please load a dataset first from the Overview page.")
+        return
+
+    if not st.session_state.get('data_preprocessing_complete', False):
+        st.error("Episodes not preprocessed. Please reload the dataset from the Overview page.")
+        return
+
+    # Generate recommendations
+    try:
+        from src.analysis.recommendation_engine import RecommendationEngine, Priority
+
+        engine = RecommendationEngine()
+
+        # Get all available results
+        motion_results = st.session_state.get('motion_quality_results')
+        spatial_results = st.session_state.get('spatial_coverage_results')
+        consistency_results = st.session_state.get('consistency_results')
+
+        # Check if any metrics have been computed
+        if not any([motion_results, spatial_results, consistency_results]):
+            render_alert(
+                title="No metrics computed yet",
+                message="Please visit the Execution, Coverage, or Consistency pages first to compute metrics before viewing recommendations.",
+                alert_type="info"
+            )
+            return
+
+        # Generate comprehensive report
+        report = engine.generate_comprehensive_report(
+            motion_quality_results=motion_results,
+            spatial_coverage_results=spatial_results,
+            consistency_results=consistency_results
+        )
+
+        # Section 1: Overall Health Score
+        render_section_header("Dataset Health Score")
+
+        col1, col2 = st.columns([1, 2])
+
+        with col1:
+            health_score = report['health_score']
+
+            # Color based on score
+            if health_score >= 0.7:
+                color = "#059669"
+                status = "Healthy"
+            elif health_score >= 0.5:
+                color = "#D97706"
+                status = "Moderate"
+            else:
+                color = "#DC2626"
+                status = "Needs Attention"
+
+            st.markdown(f"""
+            <div style="text-align: center; padding: 2rem; background: #1E293B; border-radius: 12px; border: 1px solid #334155;">
+                <div style="font-size: 3.5rem; font-weight: 700; color: {color}; font-family: 'JetBrains Mono', monospace;">
+                    {health_score:.0%}
+                </div>
+                <div style="font-size: 1.25rem; color: {color}; font-weight: 600; margin-top: 0.5rem;">
+                    {status}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col2:
+            # Summary cards
+            priority_counts = report['priority_counts']
+
+            col_a, col_b, col_c = st.columns(3)
+            with col_a:
+                st.metric(
+                    "High Priority",
+                    priority_counts[Priority.HIGH],
+                    help="Critical issues that should be addressed"
+                )
+            with col_b:
+                st.metric(
+                    "Medium Priority",
+                    priority_counts[Priority.MEDIUM],
+                    help="Important issues for optimization"
+                )
+            with col_c:
+                st.metric(
+                    "Low Priority",
+                    priority_counts[Priority.LOW],
+                    help="Minor improvements"
+                )
+
+            # Status message
+            if priority_counts[Priority.HIGH] == 0 and priority_counts[Priority.MEDIUM] == 0:
+                render_alert(
+                    title="Excellent dataset quality!",
+                    message="No significant issues detected. Your dataset is ready for ACT training.",
+                    alert_type="success"
+                )
+            elif priority_counts[Priority.HIGH] > 0:
+                render_alert(
+                    title=f"{priority_counts[Priority.HIGH]} high priority issue(s) detected",
+                    message="Address these issues to significantly improve training outcomes.",
+                    alert_type="warning"
+                )
+            else:
+                render_alert(
+                    title="Good quality with room for improvement",
+                    message="Consider addressing medium priority items for optimal results.",
+                    alert_type="info"
+                )
+
+        st.markdown("---")
+
+        # Section 2: Priority Recommendations
+        if report['total_recommendations'] > 0:
+            render_section_header("Priority Recommendations")
+
+            for rec in report['recommendations']:
+                priority_colors = {
+                    Priority.HIGH: '#DC2626',
+                    Priority.MEDIUM: '#D97706',
+                    Priority.LOW: '#059669'
+                }
+                color = priority_colors.get(rec.priority, '#64748B')
+
+                with st.expander(
+                    f"**[{rec.priority.value}]** {rec.metric} - Score: {rec.score:.3f}",
+                    expanded=(rec.priority == Priority.HIGH)
+                ):
+                    st.markdown(f"""
+                    <div style="border-left: 3px solid {color}; padding-left: 1rem; margin: 0.5rem 0;">
+                        <p><strong>Category:</strong> {rec.category}</p>
+                        <p><strong>Issue:</strong> {rec.issue}</p>
+                        <p><strong>What to do:</strong> {rec.advice}</p>
+                        <p><strong>Technique:</strong> {rec.technique}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            st.markdown("---")
+
+        # Section 3: Category Breakdown
+        render_section_header("Recommendations by Category")
+
+        tab_names = list(report['by_category'].keys())
+        if tab_names:
+            tabs = st.tabs(tab_names)
+
+            for tab, category in zip(tabs, tab_names):
+                with tab:
+                    category_recs = report['by_category'][category]
+                    if category_recs:
+                        for rec in category_recs:
+                            priority_colors = {
+                                Priority.HIGH: '#DC2626',
+                                Priority.MEDIUM: '#D97706',
+                                Priority.LOW: '#059669'
+                            }
+                            color = priority_colors.get(rec.priority, '#64748B')
+
+                            st.markdown(f"""
+                            <div style="background: #1E293B; border-radius: 8px; padding: 1rem; margin: 0.5rem 0; border-left: 4px solid {color};">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-weight: 600; color: #F8FAFC;">{rec.metric}</span>
+                                    <span style="color: {color}; font-weight: 500;">{rec.priority.value}</span>
+                                </div>
+                                <p style="color: #94A3B8; margin: 0.5rem 0; font-size: 0.9rem;">{rec.issue}</p>
+                                <p style="color: #F8FAFC; margin: 0.25rem 0; font-size: 0.875rem;"><strong>Advice:</strong> {rec.advice}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.info("No recommendations for this category.")
+        else:
+            st.success("No recommendations needed - all metrics are in good range!")
+
+        st.markdown("---")
+
+        # Section 4: Problematic Episodes
+        render_section_header("Problematic Episodes")
+
+        problematic = report['problematic_episodes']
+
+        if problematic['multiple_issues'] or problematic['single_issue']:
+            import pandas as pd
+
+            # Episodes with multiple issues
+            if problematic['multiple_issues']:
+                st.markdown("#### Episodes with Multiple Issues")
+                st.caption("These episodes appear in multiple worst-performing lists and should be reviewed first.")
+
+                multi_data = []
+                for ep_idx in problematic['multiple_issues']:
+                    issues = problematic['issue_details'].get(ep_idx, [])
+                    multi_data.append({
+                        'Episode': ep_idx,
+                        'Issues': ', '.join(issues),
+                        'Count': len(issues)
+                    })
+
+                df_multi = pd.DataFrame(multi_data)
+                st.dataframe(df_multi, use_container_width=True, hide_index=True)
+
+            # Episodes with single issues
+            if problematic['single_issue']:
+                with st.expander(f"Episodes with Single Issue ({len(problematic['single_issue'])} episodes)"):
+                    single_data = []
+                    for ep_idx in problematic['single_issue'][:20]:  # Limit to 20
+                        issues = problematic['issue_details'].get(ep_idx, [])
+                        single_data.append({
+                            'Episode': ep_idx,
+                            'Issue': issues[0] if issues else 'Unknown'
+                        })
+
+                    df_single = pd.DataFrame(single_data)
+                    st.dataframe(df_single, use_container_width=True, hide_index=True)
+
+                    if len(problematic['single_issue']) > 20:
+                        st.caption(f"Showing 20 of {len(problematic['single_issue'])} episodes")
+        else:
+            st.success("No particularly problematic episodes identified.")
+
+    except Exception as e:
+        st.error(f"Failed to generate recommendations: {str(e)}")
+        logger.error(f"Recommendations error: {e}", exc_info=True)
+
+
 def main():
     """Main application entry point."""
     # Initialize session state
     initialize_session_state()
 
-    # Render sidebar and get config
-    sidebar_config = render_sidebar()
-
-    # Handle dataset loading
-    if sidebar_config['load_button'] and sidebar_config['dataset_id']:
-        load_dataset(
-            dataset_id=sidebar_config['dataset_id'],
-            max_episodes=sidebar_config['max_episodes'],
-            sampling_strategy=sidebar_config['sampling_strategy'],
-            use_streaming=sidebar_config['use_streaming']
-        )
-
     # Navigation - Top panel for better UX
     if st.session_state.dataset_loaded:
         pages = [
             "Overview",
-            "Execution Quality",
-            "Spatial Coverage",
-            "Data Consistency",
-            "Success Indicators (Coming Soon)",
-            "Video Playback (Coming Soon)",
-            "Recommendations (Coming Soon)"
+            "Execution",
+            "Coverage",
+            "Consistency",
+            "Success",
+            "Video",
+            "Recommendations"
         ]
 
         # Create modern top navigation bar
@@ -1267,14 +2078,18 @@ def main():
         # Route to appropriate page
         if selected_page == "Overview":
             render_home_page()
-        elif selected_page == "Execution Quality":
+        elif selected_page == "Execution":
             render_motion_quality_page()
-        elif selected_page == "Spatial Coverage":
+        elif selected_page == "Coverage":
             render_spatial_coverage_page()
-        elif selected_page == "Data Consistency":
+        elif selected_page == "Consistency":
             render_data_consistency_page()
-        elif "Coming Soon" in selected_page:
-            render_page_header("Coming Soon", f"'{selected_page}' is under development and will be available soon!")
+        elif selected_page == "Success":
+            render_success_indicators_page()
+        elif selected_page == "Video":
+            render_video_playback_page()
+        elif selected_page == "Recommendations":
+            render_recommendations_page()
     else:
         # Show home page if no dataset loaded
         render_home_page()
