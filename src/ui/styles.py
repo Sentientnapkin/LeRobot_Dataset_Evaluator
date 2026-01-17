@@ -130,11 +130,29 @@ def get_navigation_css() -> str:
             align-items: center;
             max-width: 1400px;
             margin: 0 auto;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: {COLORS['border']} transparent;
+        }}
+
+        .nav-buttons-row::-webkit-scrollbar {{
+            height: 6px;
+        }}
+
+        .nav-buttons-row::-webkit-scrollbar-track {{
+            background: transparent;
+        }}
+
+        .nav-buttons-row::-webkit-scrollbar-thumb {{
+            background: {COLORS['border']};
+            border-radius: 3px;
         }}
 
         .nav-button-wrapper {{
             flex: 1;
-            min-width: 0;
+            min-width: 90px;
+            flex-shrink: 0;
         }}
 
         .nav-button-wrapper button {{
