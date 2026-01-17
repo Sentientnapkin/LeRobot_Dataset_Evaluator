@@ -319,6 +319,142 @@ class DatasetLoader:
 
         return stats
 
+    def get_camera_names(self) -> List[str]:
+        """Get list of available camera names in the dataset.
+
+        Returns:
+            List of camera name strings
+        """
+        if self._dataset is None:
+            self.load_dataset()
+
+        sample = self.get_sample(0)
+        camera_keys = [k.replace('observation.images.', '')
+                      for k in sample.keys()
+                      if k.startswith('observation.images.')]
+
+        return camera_keys
+
+    def get_frame_images(
+        self,
+        frame_index: int,
+        camera_names: Optional[List[str]] = None
+    ) -> Dict[str, np.ndarray]:
+        """Get images for a specific frame.
+
+        Args:
+            frame_index: Global frame index in dataset
+            camera_names: List of camera names to load (None = all cameras)
+
+        Returns:
+            Dictionary mapping camera names to image arrays
+        """
+        if self._dataset is None:
+            self.load_dataset()
+
+        hf_dataset = self._dataset.hf_dataset
+        row = hf_dataset[frame_index]
+
+        if camera_names is None:
+            camera_names = self.get_camera_names()
+
+        images = {}
+        for cam in camera_names:
+            key = f'observation.images.{cam}'
+            if key in row:
+                img_data = row[key]
+                # Handle different image formats
+                if hasattr(img_data, 'numpy'):
+                    img_array = img_data.numpy()
+                elif isinstance(img_data, np.ndarray):
+                    img_array = img_data
+                else:
+                    # PIL Image or other format
+                    img_array = np.array(img_data)
+
+                # Ensure proper shape (H, W, C)
+                if len(img_array.shape) == 3:
+                    # Check if channels first (C, H, W) and convert to (H, W, C)
+                    if img_array.shape[0] in [1, 3, 4] and img_array.shape[0] < img_array.shape[1]:
+                        img_array = np.transpose(img_array, (1, 2, 0))
+
+                images[cam] = img_array
+
+        return images
+
+    def get_episode_images(
+        self,
+        episode_index: int,
+        camera_names: Optional[List[str]] = None,
+        max_frames: Optional[int] = None,
+        show_progress: bool = False
+    ) -> Dict[str, List[np.ndarray]]:
+        """Get all images for an episode.
+
+        Args:
+            episode_index: Episode index
+            camera_names: List of camera names to load (None = all cameras)
+            max_frames: Maximum frames to load (None = all, useful for large episodes)
+            show_progress: Whether to show progress bar
+
+        Returns:
+            Dictionary mapping camera names to lists of image arrays
+        """
+        if self._dataset is None:
+            self.load_dataset()
+
+        # Get frame indices for this episode
+        hf_dataset = self._dataset.hf_dataset
+        episode_indices = hf_dataset['episode_index']
+
+        episode_mask = [idx == episode_index for idx in episode_indices]
+        episode_frames = [i for i, mask in enumerate(episode_mask) if mask]
+
+        if not episode_frames:
+            raise ValueError(f"No frames found for episode {episode_index}")
+
+        # Subsample if requested
+        if max_frames is not None and len(episode_frames) > max_frames:
+            step = len(episode_frames) // max_frames
+            episode_frames = episode_frames[::step][:max_frames]
+
+        if camera_names is None:
+            camera_names = self.get_camera_names()
+
+        # Initialize storage
+        images = {cam: [] for cam in camera_names}
+
+        iterator = episode_frames
+        if show_progress:
+            iterator = tqdm(iterator, desc=f"Loading images for episode {episode_index}")
+
+        for frame_idx in iterator:
+            frame_images = self.get_frame_images(frame_idx, camera_names)
+            for cam, img in frame_images.items():
+                images[cam].append(img)
+
+        return images
+
+    def get_episode_frame_indices(self, episode_index: int) -> List[int]:
+        """Get the global frame indices for a specific episode.
+
+        Args:
+            episode_index: Episode index
+
+        Returns:
+            List of global frame indices
+        """
+        if self._dataset is None:
+            self.load_dataset()
+
+        hf_dataset = self._dataset.hf_dataset
+        episode_indices = hf_dataset['episode_index']
+
+        episode_mask = [idx == episode_index for idx in episode_indices]
+        episode_frames = [i for i, mask in enumerate(episode_mask) if mask]
+
+        return episode_frames
+
     @property
     def num_episodes(self) -> int:
         """Get number of episodes in dataset."""
