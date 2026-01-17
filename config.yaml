@@ -1,0 +1,43 @@
+dataset:
+  hf_account: "SentientNapkin"
+  cache_dir: "./cache"
+  streaming: true
+  max_episodes: null  # null = all episodes
+
+robot:
+  type: "generic_6dof"  # Options: 'ur5', 'panda', 'so-arm100', 'generic_6dof'
+  dof: 6
+
+metrics:
+  spatial_coverage:
+    voxel_size: 0.05  # meters
+    min_coverage_threshold: 0.4  # 40%
+
+  motion_quality:
+    jerk_threshold_multiplier: 2.0  # Flag if jerk > 2σ above mean
+    smoothness_method: "sparc"  # Options: 'sparc', 'ldlj'
+
+  anomaly_detection:
+    method: "isolation_forest"  # Options: 'isolation_forest', 'lof'
+    contamination: 0.1  # Expected outlier percentage (10%)
+
+quality_scoring:
+  weights:
+    motion_quality: 0.40      # Highest weight (most critical for ACT)
+    spatial_coverage: 0.30
+    data_consistency: 0.20
+    success_indicators: 0.10
+
+  thresholds:
+    red: 60    # <60 = Poor quality (Red)
+    yellow: 80  # 60-80 = Acceptable (Yellow)
+    green: 80   # >80 = Good quality (Green)
+
+visualization:
+  theme: "plotly_dark"
+  dpi: 150
+  max_trajectory_display: 100  # Max trajectories to display in plots
+
+performance:
+  n_workers: 4  # Parallel processing workers
+  chunk_size: 1000  # Episodes per processing chunk
