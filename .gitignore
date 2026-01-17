@@ -58,9 +58,9 @@ cache/
 # HuggingFace
 .huggingface/
 
-# Data (exclude large datasets)
-data/
-datasets/
+# Data (exclude large datasets, but not src/data module)
+/data/
+/datasets/
 *.parquet
 *.mp4
 *.avi
