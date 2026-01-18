@@ -8,18 +8,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 
-
-# Color scheme
-COLORS = {
-    'trajectory': '#2563EB',
-    'current': '#DC2626',
-    'start': '#059669',
-    'end': '#D97706',
-    'background': '#1E293B',
-    'grid': '#334155',
-    'text': '#F8FAFC',
-    'secondary': '#64748B'
-}
+from .colors import TRAJECTORY_PLAYBACK_COLORS as COLORS, DIMENSION_COLORS
 
 
 def create_3d_trajectory_plot(
@@ -167,8 +156,6 @@ def create_state_timeline(
         subplot_titles=labels[:n_dims_show]
     )
 
-    colors = ['#2563EB', '#059669', '#D97706', '#DC2626', '#8B5CF6', '#EC4899']
-
     for i in range(n_dims_show):
         dim_data = states[:, i] if n_dims > 1 else states
 
@@ -179,7 +166,7 @@ def create_state_timeline(
                 y=dim_data,
                 mode='lines',
                 name=labels[i],
-                line=dict(color=colors[i % len(colors)], width=2),
+                line=dict(color=DIMENSION_COLORS[i % len(DIMENSION_COLORS)], width=2),
                 showlegend=False
             ),
             row=i+1, col=1

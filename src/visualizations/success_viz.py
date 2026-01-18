@@ -9,19 +9,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import numpy as np
 
-
-# Color scheme
-COLORS = {
-    'excellent': '#059669',
-    'good': '#0891B2',
-    'marginal': '#D97706',
-    'poor': '#DC2626',
-    'primary': '#2563EB',
-    'secondary': '#64748B',
-    'background': '#1E293B',
-    'grid': '#334155',
-    'text': '#F8FAFC'
-}
+from .colors import COLORS
 
 
 def plot_episode_length_histogram(results: Dict[str, Any]) -> go.Figure:
