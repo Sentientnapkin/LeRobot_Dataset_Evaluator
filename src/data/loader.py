@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """LeRobot dataset loader with streaming support."""
 
 import os
@@ -5,7 +7,9 @@ import functools
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 import numpy as np
-from tqdm import tqdm
+from tqdm.auto import tqdm
+
+from streamlit.delta_generator import DeltaGenerator
 import torch
 
 try:
@@ -119,17 +123,19 @@ class DatasetLoader:
             if self.streaming:
                 logger.info("Using streaming mode...")
 
-            if max_episodes != None:
+            if max_episodes is not None:
                 self._dataset = LeRobotDataset(
-                self.dataset_id,
-                root=self.cache_dir,
-                episodes=[_ for _ in range(max_episodes)]
-            )
-
-            self._dataset = LeRobotDataset(
-                self.dataset_id,
-                root=self.cache_dir
-            )
+                    self.dataset_id,
+                    root=self.cache_dir,
+                    episodes=list(range(max_episodes)),
+                    video_backend="pyav"
+                )
+            else:
+                self._dataset = LeRobotDataset(
+                    self.dataset_id,
+                    root=self.cache_dir,
+                    video_backend="pyav"
+                )
 
             logger.info(f"Dataset loaded successfully: {len(self._dataset)} samples")
 
@@ -156,13 +162,15 @@ class DatasetLoader:
     def get_episode_data(
         self,
         episode_index: int,
-        include_images: bool = False
+        include_images: bool = False,
+        show_progress: bool = False
     ) -> Dict[str, Any]:
         """Get all data for a specific episode.
 
         Args:
             episode_index: Episode index
             include_images: Whether to include image observations
+            show_progress: Whether to show progress bar
 
         Returns:
             Dictionary containing episode data
@@ -194,7 +202,15 @@ class DatasetLoader:
                    f"({len(episode_frames)} frames)...")
 
         # Extract data from HuggingFace dataset (no video loading)
-        for frame_idx in episode_frames:
+        frame_iterator = episode_frames
+        if show_progress:
+            frame_iterator = tqdm(
+                episode_frames,
+                desc=f"Loading episode {episode_index}",
+                unit="frame"
+            )
+
+        for frame_idx in frame_iterator:
             row = hf_dataset[frame_idx]
 
             # Extract state
@@ -236,7 +252,8 @@ class DatasetLoader:
         max_episodes: Optional[int] = None,
         include_images: bool = False,
         show_progress: bool = True,
-        sampling_strategy: str = 'auto'
+        sampling_strategy: str = 'auto',
+        progress_bar: DeltaGenerator = None,
     ) -> List[Dict[str, Any]]:
         """Get data for all episodes.
 
@@ -299,6 +316,7 @@ class DatasetLoader:
                     include_images=include_images
                 )
                 episodes.append(episode_data)
+                progress_bar.progress(episode_idx/ (len(iterator) * 2), "Preprocessing episodes...")
             except Exception as e:
                 logger.warning(f"Failed to load episode {episode_idx}: {e}")
                 continue
@@ -372,8 +390,8 @@ class DatasetLoader:
         if self._dataset is None:
             self.load_dataset()
 
-        hf_dataset = self._dataset.hf_dataset
-        row = hf_dataset[frame_index]
+        # Use LeRobotDataset indexing to get decoded video frames
+        sample = self._dataset[frame_index]
 
         if camera_names is None:
             camera_names = self.get_camera_names()
@@ -381,9 +399,9 @@ class DatasetLoader:
         images = {}
         for cam in camera_names:
             key = f'observation.images.{cam}'
-            if key in row:
-                img_data = row[key]
-                # Handle different image formats
+            if key in sample:
+                img_data = sample[key]
+                # Handle different image formats (typically torch tensors from video decoding)
                 if hasattr(img_data, 'numpy'):
                     img_array = img_data.numpy()
                 elif isinstance(img_data, np.ndarray):
@@ -392,7 +410,7 @@ class DatasetLoader:
                     # PIL Image or other format
                     img_array = np.array(img_data)
 
-                # Ensure proper shape (H, W, C)
+                # Ensure proper shape (H, W, C) for display
                 if len(img_array.shape) == 3:
                     # Check if channels first (C, H, W) and convert to (H, W, C)
                     if img_array.shape[0] in [1, 3, 4] and img_array.shape[0] < img_array.shape[1]:
@@ -461,6 +479,36 @@ class DatasetLoader:
             List of global frame indices
         """
         return self._get_episode_frame_indices(episode_index).tolist()
+
+    def get_video_paths(self, episode_index: int) -> Dict[str, Path]:
+        """Get paths to video files for a specific episode.
+
+        Args:
+            episode_index: Episode index
+
+        Returns:
+            Dictionary mapping camera names to video file paths
+        """
+        if self._dataset is None:
+            self.load_dataset()
+
+        video_paths = {}
+        camera_names = self.get_camera_names()
+
+        # LeRobot stores videos in: {root}/{repo_id}/videos/{camera_name}/episode_{index:06d}.mp4
+        dataset_path = Path(self.cache_dir) / self.dataset_id
+
+        for cam in camera_names:
+            video_file = dataset_path / "videos" / cam / f"episode_{episode_index:06d}.mp4"
+            if video_file.exists():
+                video_paths[cam] = video_file
+            else:
+                # Try alternative naming conventions
+                alt_file = dataset_path / "videos" / f"observation.images.{cam}" / f"episode_{episode_index:06d}.mp4"
+                if alt_file.exists():
+                    video_paths[cam] = alt_file
+
+        return video_paths
 
     @property
     def num_episodes(self) -> int:

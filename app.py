@@ -3,7 +3,14 @@
 import streamlit as st
 from pathlib import Path
 import sys
+import time
 import numpy as np
+
+from tqdm.auto import tqdm
+from tqdm.std import TqdmDefaultWriteLock
+
+if not hasattr(tqdm, "_lock"):
+    tqdm._lock = TqdmDefaultWriteLock()
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -140,7 +147,7 @@ def render_sidebar():
     load_button = st.sidebar.button(
         "Load Dataset",
         type="primary",
-        use_container_width=True,
+        width="stretch",
         disabled=(dataset_id is None)
     )
 
@@ -252,7 +259,7 @@ def render_home_page():
 
         # Load button
         dataset_id = f"{hf_account}/{dataset_name}" if hf_account and dataset_name else None
-        if st.button("Load Dataset", type="primary", use_container_width=True, disabled=(dataset_id is None)):
+        if st.button("Load Dataset", type="primary", width="stretch", disabled=(dataset_id is None)):
             if dataset_id:
                 load_dataset(dataset_id, max_episodes, sampling_strategy, use_streaming)
                 st.rerun()
@@ -391,29 +398,38 @@ def load_and_preprocess_episodes():
         max_episodes_choice = st.session_state.get('max_episodes_choice', 100)
         sampling_strategy = st.session_state.get('sampling_strategy', 'auto')
 
-        with st.spinner("Preprocessing episodes..."):
-            # Load episodes
-            episodes = loader.get_all_episodes_data(
-                max_episodes=max_episodes_choice,
-                include_images=False,
-                show_progress=True,
-                sampling_strategy=sampling_strategy
-            )
+        # Create Progress Bar
+        progress_bar = st.progress(0, "Preprocessing episodes...")  
 
-            # Preprocess episodes to extract features
-            preprocessor = DataPreprocessor(robot_config)
-            episodes_features = []
+        preprocessor = DataPreprocessor(robot_config)
 
-            for episode in episodes:
-                features = preprocessor.extract_features(episode, smooth_sigma=1.0)
-                episodes_features.append(features)
+        # Load episodes
+        episodes = loader.get_all_episodes_data(
+            max_episodes=max_episodes_choice,
+            include_images=False,
+            show_progress=True,
+            sampling_strategy=sampling_strategy,
+            progress_bar=progress_bar
+        )
 
-            # Store in session state for all pages to access
-            st.session_state.episodes_features = episodes_features
-            st.session_state.episodes_data = episodes
-            st.session_state.data_preprocessing_complete = True
+        # Preprocess episodes to extract features
+        episodes_features = []
+        
+        progress_bar_denom = len(episodes) * 2
 
-            logger.info(f"Preprocessed {len(episodes)} episodes successfully")
+        for index, episode in enumerate(episodes):
+            features = preprocessor.extract_features(episode, smooth_sigma=1.0)
+            episodes_features.append(features)
+            progress_bar.progress((len(episodes) + index)/progress_bar_denom, "Preprocessing episodes...")
+
+        # Store in session state for all pages to access
+        st.session_state.episodes_features = episodes_features
+        st.session_state.episodes_data = episodes
+        st.session_state.data_preprocessing_complete = True
+
+        progress_bar.empty()
+
+        logger.info(f"Preprocessed {len(episodes)} episodes successfully")
 
     except Exception as e:
         st.error(f"Failed to preprocess episodes: {str(e)}")
@@ -478,7 +494,7 @@ def render_motion_quality_page():
         try:
             from src.visualizations.execution_quality_viz import plot_quality_gauge
             fig_gauge = plot_quality_gauge(overall_mean)
-            st.plotly_chart(fig_gauge, use_container_width=True)
+            st.plotly_chart(fig_gauge, width="stretch")
         except Exception as e:
             st.metric("Overall Quality Score", f"{overall_mean:.3f}")
             logger.error(f"Gauge visualization error: {e}", exc_info=True)
@@ -541,7 +557,7 @@ def render_motion_quality_page():
 
     with col4:
         jerk_mean = results['jerk_scores']['mean']
-        st.metric("Jerk (Recalibrated)", f"{jerk_mean:.3f}",
+        st.metric("Jerk", f"{jerk_mean:.3f}",
                  help="Motion smoothness calibrated for teleoperation")
 
     st.markdown("---")
@@ -572,43 +588,43 @@ def render_motion_quality_page():
         with tab1:
             st.markdown("#### Quality Trends Across Episodes")
             fig1 = plot_quality_trends(results['episode_results'])
-            st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(fig1, width="stretch")
 
             st.markdown("#### Episode Quality Heatmap")
             fig2 = plot_episode_heatmap(results['episode_results'])
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width="stretch")
 
         with tab2:
             st.markdown("#### Metric Comparison")
             fig1 = plot_metric_comparison_bars(results)
-            st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(fig1, width="stretch")
 
             st.markdown("#### Metric Distributions")
             fig2 = plot_metric_distributions(results)
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width="stretch")
 
         with tab3:
             st.markdown("#### Movement Units Analysis")
             st.caption("Shows correlation between purposeful movement segments and overall quality")
             fig1 = plot_movement_units_analysis(results['episode_results'])
-            st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(fig1, width="stretch")
 
         with tab4:
             st.markdown("#### Hesitation Analysis")
             st.caption("Lower hesitation rates indicate more confident control")
             fig1 = plot_hesitation_analysis(results['episode_results'])
-            st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(fig1, width="stretch")
 
             st.markdown("#### Submovement Patterns")
             st.caption("Lower submovement index indicates smoother, more direct control")
             fig2 = plot_submovement_patterns(results['episode_results'])
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width="stretch")
 
         with tab5:
             st.markdown("#### Jerk Distribution with Outlier Detection")
             st.caption("Shows jerk score distribution and identifies episodes with excessive jerkiness")
             fig1 = plot_jerk_distribution_with_outliers(results['episode_results'])
-            st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(fig1, width="stretch")
 
     except Exception as e:
         st.error(f"Visualization error: {str(e)}")
@@ -783,7 +799,7 @@ def render_motion_quality_page():
             'Jerk': '{:.3f}'
         })
 
-        st.dataframe(styled_df, use_container_width=True, height=400)
+        st.dataframe(styled_df, width="stretch", height=400)
 
         st.markdown("#### Summary Statistics")
         col1, col2, col3, col4, col5 = st.columns(5)
@@ -970,7 +986,7 @@ def render_spatial_coverage_page():
 
         with tab1:
             if 'workspace_3d' in figures:
-                st.plotly_chart(figures['workspace_3d'], use_container_width=True)
+                st.plotly_chart(figures['workspace_3d'], width="stretch")
 
         with tab2:
             try:
@@ -988,7 +1004,7 @@ def render_spatial_coverage_page():
                         coverage['voxel_edges'],
                         title="Exploration Density - Where Did the Robot Spend Most Time?"
                     )
-                    st.plotly_chart(density_fig, use_container_width=True)
+                    st.plotly_chart(density_fig, width="stretch")
 
                     st.markdown("---")
                     st.markdown("#### Coverage Insights Dashboard")
@@ -996,7 +1012,7 @@ def render_spatial_coverage_page():
                         coverage,
                         title="Workspace Coverage Insights"
                     )
-                    st.plotly_chart(insights_fig, use_container_width=True)
+                    st.plotly_chart(insights_fig, width="stretch")
                 else:
                     st.info("Exploration insights available for 3D workspace data only.")
             except Exception as e:
@@ -1005,17 +1021,17 @@ def render_spatial_coverage_page():
 
         with tab3:
             if 'starting_variance' in figures:
-                st.plotly_chart(figures['starting_variance'], use_container_width=True)
+                st.plotly_chart(figures['starting_variance'], width="stretch")
             if 'starting_pca' in figures:
-                st.plotly_chart(figures['starting_pca'], use_container_width=True)
+                st.plotly_chart(figures['starting_pca'], width="stretch")
 
         with tab4:
             if 'position_heatmap' in figures:
-                st.plotly_chart(figures['position_heatmap'], use_container_width=True)
+                st.plotly_chart(figures['position_heatmap'], width="stretch")
 
         with tab5:
             if 'coverage_summary' in figures:
-                st.plotly_chart(figures['coverage_summary'], use_container_width=True)
+                st.plotly_chart(figures['coverage_summary'], width="stretch")
 
         with tab6:
             try:
@@ -1069,7 +1085,7 @@ def render_spatial_coverage_page():
 
                     st.session_state.interactive_joint_angles = np.array(updated_angles)
 
-                    if st.button("Reset to Neutral Pose", use_container_width=True):
+                    if st.button("Reset to Neutral Pose", width="stretch"):
                         if robot_config:
                             st.session_state.interactive_joint_angles = (
                                 robot_config.joint_limits_lower + robot_config.joint_limits_upper
@@ -1100,7 +1116,7 @@ def render_spatial_coverage_page():
                         robot_config=robot_config,
                         joint_angles=st.session_state.interactive_joint_angles
                     )
-                    st.plotly_chart(arm_fig, use_container_width=True, key="interactive_arm")
+                    st.plotly_chart(arm_fig, width="stretch", key="interactive_arm")
 
             except Exception as e:
                 st.error(f"Could not load interactive joint visualization: {str(e)}")
@@ -1246,19 +1262,19 @@ def render_data_consistency_page():
 
         with tab1:
             if 'consistency_summary' in figures:
-                st.plotly_chart(figures['consistency_summary'], use_container_width=True)
+                st.plotly_chart(figures['consistency_summary'], width="stretch")
 
         with tab2:
             if 'temporal_consistency' in figures:
-                st.plotly_chart(figures['temporal_consistency'], use_container_width=True)
+                st.plotly_chart(figures['temporal_consistency'], width="stretch")
 
         with tab3:
             if 'missing_data' in figures:
-                st.plotly_chart(figures['missing_data'], use_container_width=True)
+                st.plotly_chart(figures['missing_data'], width="stretch")
 
         with tab4:
             if 'alignment_issues' in figures:
-                st.plotly_chart(figures['alignment_issues'], use_container_width=True)
+                st.plotly_chart(figures['alignment_issues'], width="stretch")
 
     except Exception as e:
         st.error(f"Visualization error: {str(e)}")
@@ -1343,8 +1359,6 @@ def render_video_playback_page():
     else:
         current_frame = 0
 
-    st.markdown("---")
-
     # Trajectory visualization
     try:
         from src.visualizations.trajectory_playback import create_trajectory_dashboard
@@ -1364,7 +1378,7 @@ def render_video_playback_page():
             render_section_header("3D Trajectory Visualization")
 
             if 'trajectory_3d' in figures:
-                st.plotly_chart(figures['trajectory_3d'], use_container_width=True)
+                st.plotly_chart(figures['trajectory_3d'], width="stretch")
 
                 # Position info
                 states = np.array(episode_data.get('states', []))
@@ -1382,13 +1396,13 @@ def render_video_playback_page():
 
             if 'velocity_profile' in figures:
                 st.markdown("#### Velocity Profile")
-                st.plotly_chart(figures['velocity_profile'], use_container_width=True)
+                st.plotly_chart(figures['velocity_profile'], width="stretch")
 
         with tab2:
             render_section_header("State Evolution Over Time")
 
             if 'state_timeline' in figures:
-                st.plotly_chart(figures['state_timeline'], use_container_width=True)
+                st.plotly_chart(figures['state_timeline'], width="stretch")
 
             # State statistics
             states = np.array(episode_data.get('states', []))
@@ -1409,13 +1423,13 @@ def render_video_playback_page():
                     })
 
                 stats_df = pd.DataFrame(stats_data)
-                st.dataframe(stats_df, use_container_width=True, hide_index=True)
+                st.dataframe(stats_df, width="stretch", hide_index=True)
 
         with tab3:
             render_section_header("Action Evolution Over Time")
 
             if 'action_timeline' in figures:
-                st.plotly_chart(figures['action_timeline'], use_container_width=True)
+                st.plotly_chart(figures['action_timeline'], width="stretch")
 
             # Action statistics
             actions = np.array(episode_data.get('actions', []))
@@ -1436,7 +1450,7 @@ def render_video_playback_page():
                     })
 
                 stats_df = pd.DataFrame(stats_data)
-                st.dataframe(stats_df, use_container_width=True, hide_index=True)
+                st.dataframe(stats_df, width="stretch", hide_index=True)
             else:
                 st.info("No action data available for this episode.")
 
@@ -1450,7 +1464,7 @@ def render_video_playback_page():
                 - Click **Pause** to stop
                 - Use the slider below the plot to jump to specific frames
                 """)
-                st.plotly_chart(figures['animated_trajectory'], use_container_width=True)
+                st.plotly_chart(figures['animated_trajectory'], width="stretch")
             else:
                 st.info("Animation not available for this episode.")
 
@@ -1462,10 +1476,10 @@ def render_video_playback_page():
             if loader is None:
                 st.warning("Dataset loader not available.")
             elif not hasattr(loader, 'get_camera_names'):
-                st.warning("Please restart the Streamlit app to enable camera playback (new features require app restart).")
+                st.warning("Please restart the Streamlit app to enable camera playback.")
             else:
                 try:
-                    # Cache camera names in session state (only detect once)
+                    # Cache camera names in session state
                     if 'available_cameras' not in st.session_state:
                         with st.spinner("Detecting cameras..."):
                             st.session_state.available_cameras = loader.get_camera_names()
@@ -1475,20 +1489,42 @@ def render_video_playback_page():
                     if not camera_names:
                         st.info("No camera data found in this dataset.")
                     else:
-                        st.success(f"Found {len(camera_names)} camera(s): {', '.join(camera_names)}")
-
                         # Get the global frame indices for this episode
                         episode_idx = episodes_data[selected_episode]['episode_index']
                         frame_indices = loader.get_episode_frame_indices(episode_idx)
 
-                        if frame_indices and current_frame < len(frame_indices):
-                            global_frame_idx = frame_indices[current_frame]
+                        if not frame_indices:
+                            st.warning("Frame indices not available for this episode.")
+                        else:
+                            n_video_frames = len(frame_indices)
+                            fps = st.session_state.metadata.get('fps', 30) if st.session_state.metadata else 30
 
-                            # Load only the current frame's images (on-demand)
+                            # Initialize video player state
+                            if 'video_playing' not in st.session_state:
+                                st.session_state.video_playing = False
+                            if 'video_frame' not in st.session_state:
+                                st.session_state.video_frame = 0
+                            if 'video_episode' not in st.session_state:
+                                st.session_state.video_episode = episode_idx
+                            if 'video_speed' not in st.session_state:
+                                st.session_state.video_speed = 1
+
+                            # Reset frame if episode changed
+                            if st.session_state.video_episode != episode_idx:
+                                st.session_state.video_frame = 0
+                                st.session_state.video_playing = False
+                                st.session_state.video_episode = episode_idx
+
+                            # Clamp frame to valid range
+                            st.session_state.video_frame = max(0, min(st.session_state.video_frame, n_video_frames - 1))
+
+                            # Load and display frame first
+                            current_video_frame = st.session_state.video_frame
+                            global_frame_idx = frame_indices[current_video_frame]
                             frame_images = loader.get_frame_images(global_frame_idx, camera_names)
 
                             if frame_images:
-                                # Display cameras in columns
+                                # Display cameras
                                 n_cameras = len(frame_images)
                                 if n_cameras == 1:
                                     cols = [st.container()]
@@ -1501,29 +1537,89 @@ def render_video_playback_page():
                                     col_idx = i % len(cols)
                                     with cols[col_idx]:
                                         st.markdown(f"**{cam_name}**")
-                                        st.image(
-                                            img,
-                                            caption=f"Frame {current_frame + 1}/{n_frames}",
-                                            use_container_width=True
-                                        )
+                                        st.image(img, use_container_width=True)
 
-                                # Frame info
-                                st.markdown("---")
-                                col1, col2, col3 = st.columns(3)
-                                with col1:
-                                    st.metric("Current Frame", current_frame + 1)
-                                with col2:
-                                    st.metric("Total Frames", n_frames)
-                                with col3:
-                                    if n_frames > 0:
-                                        progress = (current_frame + 1) / n_frames * 100
-                                        st.metric("Progress", f"{progress:.1f}%")
+                            # Timeline callback
+                            def on_timeline_change():
+                                st.session_state.video_frame = st.session_state.video_timeline
+                                st.session_state.video_playing = False
 
-                                st.caption("Use the frame slider above to scrub through the video.")
-                            else:
-                                st.warning("Could not load images for this frame.")
-                        else:
-                            st.warning("Frame indices not available for this episode.")
+                            # Sync timeline BEFORE widget creation
+                            if 'video_timeline' not in st.session_state:
+                                st.session_state.video_timeline = st.session_state.video_frame
+                            elif st.session_state.video_timeline != st.session_state.video_frame:
+                                st.session_state.video_timeline = st.session_state.video_frame
+
+                            # Combined timeline and info display
+                            time_sec = current_video_frame / fps
+                            total_time = n_video_frames / fps
+                            st.slider(
+                                f"Frame {current_video_frame + 1}/{n_video_frames} | {time_sec:.2f}s / {total_time:.2f}s",
+                                min_value=0,
+                                max_value=n_video_frames - 1,
+                                key="video_timeline",
+                                on_change=on_timeline_change
+                            )
+
+                            # Player controls in a single row
+                            ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4, ctrl_col5, ctrl_col6 = st.columns([1, 1, 1, 1, 1, 2])
+
+                            with ctrl_col1:
+                                if st.button(":material/skip_previous:", key="video_start", help="Go to start"):
+                                    st.session_state.video_frame = 0
+                                    st.session_state.video_playing = False
+                                    st.rerun()
+
+                            with ctrl_col2:
+                                if st.button(":material/fast_rewind:", key="video_back", help="Step back"):
+                                    st.session_state.video_frame = max(0, st.session_state.video_frame - 1)
+                                    st.session_state.video_playing = False
+                                    st.rerun()
+
+                            with ctrl_col3:
+                                if st.session_state.video_playing:
+                                    if st.button(":material/pause:", key="video_pause", help="Pause"):
+                                        st.session_state.video_playing = False
+                                        st.rerun()
+                                else:
+                                    if st.button(":material/play_arrow:", key="video_play", help="Play"):
+                                        st.session_state.video_playing = True
+                                        st.rerun()
+
+                            with ctrl_col4:
+                                if st.button(":material/fast_forward:", key="video_forward", help="Step forward"):
+                                    st.session_state.video_frame = min(n_video_frames - 1, st.session_state.video_frame + 1)
+                                    st.session_state.video_playing = False
+                                    st.rerun()
+
+                            with ctrl_col5:
+                                if st.button(":material/skip_next:", key="video_end", help="Go to end"):
+                                    st.session_state.video_frame = n_video_frames - 1
+                                    st.session_state.video_playing = False
+                                    st.rerun()
+
+                            with ctrl_col6:
+                                frame_skip = st.select_slider(
+                                    "Frame Skip",
+                                    options=[1, 2, 5, 10, 15, 30],
+                                    value=int(st.session_state.video_speed) if st.session_state.video_speed in [1, 2, 5, 10, 15, 30] else 1,
+                                    key="video_speed_slider",
+                                    help="Frames to skip per update"
+                                )
+                                st.session_state.video_speed = frame_skip
+
+                            # Auto-advance if playing
+                            if st.session_state.video_playing:
+                                if st.session_state.video_frame < n_video_frames - 1:
+                                    frames_to_advance = max(1, int(st.session_state.video_speed))
+                                    st.session_state.video_frame = min(
+                                        n_video_frames - 1,
+                                        st.session_state.video_frame + frames_to_advance
+                                    )
+                                    st.rerun()
+                                else:
+                                    st.session_state.video_playing = False
+                                    st.rerun()
 
                 except Exception as e:
                     error_msg = str(e)
@@ -1718,18 +1814,18 @@ def render_success_indicators_page():
         with tab1:
             col1, col2 = st.columns(2)
             with col1:
-                st.plotly_chart(figures['length_histogram'], use_container_width=True)
+                st.plotly_chart(figures['length_histogram'], width="stretch")
             with col2:
-                st.plotly_chart(figures['success_rate_pie'], use_container_width=True)
+                st.plotly_chart(figures['success_rate_pie'], width="stretch")
 
-            st.plotly_chart(figures['classification_bar'], use_container_width=True)
+            st.plotly_chart(figures['classification_bar'], width="stretch")
 
         with tab2:
-            st.plotly_chart(figures['quality_distribution'], use_container_width=True)
-            st.plotly_chart(figures['quality_scatter'], use_container_width=True)
+            st.plotly_chart(figures['quality_distribution'], width="stretch")
+            st.plotly_chart(figures['quality_scatter'], width="stretch")
 
         with tab3:
-            st.plotly_chart(figures['best_worst'], use_container_width=True)
+            st.plotly_chart(figures['best_worst'], width="stretch")
 
             col1, col2 = st.columns(2)
 
@@ -1738,16 +1834,16 @@ def render_success_indicators_page():
                 import pandas as pd
                 best_df = pd.DataFrame(results['best_episodes'])
                 best_df.columns = ['Episode', 'Quality', 'Length', 'Classification']
-                st.dataframe(best_df, use_container_width=True, hide_index=True)
+                st.dataframe(best_df, width="stretch", hide_index=True)
 
             with col2:
                 st.markdown("#### Worst Performing Episodes")
                 worst_df = pd.DataFrame(results['worst_episodes'])
                 worst_df.columns = ['Episode', 'Quality', 'Length', 'Classification']
-                st.dataframe(worst_df, use_container_width=True, hide_index=True)
+                st.dataframe(worst_df, width="stretch", hide_index=True)
 
         with tab4:
-            st.plotly_chart(figures['correlation'], use_container_width=True)
+            st.plotly_chart(figures['correlation'], width="stretch")
 
             correlation = results['length_quality_correlation']
             st.info(f"**Interpretation:** {correlation['interpretation']}")
@@ -2009,7 +2105,7 @@ def render_recommendations_page():
                     })
 
                 df_multi = pd.DataFrame(multi_data)
-                st.dataframe(df_multi, use_container_width=True, hide_index=True)
+                st.dataframe(df_multi, width="stretch", hide_index=True)
 
             # Episodes with single issues
             if problematic['single_issue']:
@@ -2023,7 +2119,7 @@ def render_recommendations_page():
                         })
 
                     df_single = pd.DataFrame(single_data)
-                    st.dataframe(df_single, use_container_width=True, hide_index=True)
+                    st.dataframe(df_single, width="stretch", hide_index=True)
 
                     if len(problematic['single_issue']) > 20:
                         st.caption(f"Showing 20 of {len(problematic['single_issue'])} episodes")
@@ -2066,7 +2162,7 @@ def main():
             with col:
                 st.markdown('<div class="nav-button-wrapper">', unsafe_allow_html=True)
                 button_type = "primary" if i == current_idx else "secondary"
-                if st.button(page, key=f"nav_{i}", use_container_width=True, type=button_type):
+                if st.button(page, key=f"nav_{i}", width="stretch", type=button_type):
                     st.session_state.current_page = page
                     selected_page = page
                     st.rerun()
