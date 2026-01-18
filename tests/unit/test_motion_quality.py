@@ -305,61 +305,27 @@ class TestUtilities:
         assert np.sum(outliers) > 0  # Should detect some outliers
 
 
-def run_integration_test():
-    """Run full integration test with synthetic data."""
-    print("\n" + "="*60)
-    print("Running Integration Test")
-    print("="*60 + "\n")
+class TestVisualizationsMotionQuality:
+    """Test motion quality visualization generation."""
 
-    # Create analyzer and preprocessor
-    analyzer = MotionQualityAnalyzer(
-        jerk_threshold_multiplier=2.0,
-        smoothness_method="sparc"
-    )
-    preprocessor = DataPreprocessor()
+    @pytest.mark.unit
+    def test_visualizations_generation(self):
+        """Test that visualizations can be generated without error."""
+        analyzer = MotionQualityAnalyzer(
+            jerk_threshold_multiplier=2.0,
+            smoothness_method="sparc"
+        )
+        preprocessor = DataPreprocessor()
 
-    # Create synthetic dataset
-    print("Creating synthetic dataset (10 episodes)...")
-    episodes_features = []
+        # Create synthetic dataset
+        episodes_features = []
+        for i in range(5):
+            episode = create_synthetic_trajectory(n_frames=50, noise_level=0.01 * (i + 1))
+            features = preprocessor.extract_features(episode, smooth_sigma=1.0)
+            episodes_features.append(features)
 
-    for i in range(10):
-        # Mix of smooth and jerky trajectories
-        if i % 2 == 0:
-            episode = create_synthetic_trajectory(n_frames=100, noise_level=0.01)
-        else:
-            episode = create_jerky_trajectory(n_frames=100)
+        results = analyzer.analyze_multiple_episodes(episodes_features, show_progress=False)
 
-        features = preprocessor.extract_features(episode, smooth_sigma=1.0)
-        episodes_features.append(features)
-
-    print(f"✓ Created {len(episodes_features)} episodes\n")
-
-    # Analyze motion quality
-    print("Analyzing motion quality...")
-    results = analyzer.analyze_multiple_episodes(episodes_features, show_progress=False)
-
-    print(f"✓ Analysis complete\n")
-
-    # Display results
-    print("Results:")
-    print("-" * 60)
-    print(f"Overall Score (mean): {results['overall_score']['mean']:.3f}")
-    print(f"Overall Score (std):  {results['overall_score']['std']:.3f}")
-    print(f"Overall Score (min):  {results['overall_score']['min']:.3f}")
-    print(f"Overall Score (max):  {results['overall_score']['max']:.3f}")
-    print()
-
-    print("Metric Breakdown:")
-    print(f"  Jerk:         {results['jerk_scores']['mean']:.3f} ± {results['jerk_scores']['std']:.3f}")
-    print(f"  Smoothness:   {results['smoothness_scores']['mean']:.3f} ± {results['smoothness_scores']['std']:.3f}")
-    print(f"  Acceleration: {results['acceleration_scores']['mean']:.3f} ± {results['acceleration_scores']['std']:.3f}")
-    print(f"  Velocity:     {results['velocity_scores']['mean']:.3f} ± {results['velocity_scores']['std']:.3f}")
-    print(f"  Efficiency:   {results['efficiency_scores']['mean']:.3f} ± {results['efficiency_scores']['std']:.3f}")
-    print()
-
-    # Test visualizations
-    print("Testing visualizations...")
-    try:
         from src.visualizations.motion_viz import (
             plot_overall_scores_distribution,
             plot_metric_comparison_bars,
@@ -367,36 +333,15 @@ def run_integration_test():
             plot_smoothness_comparison
         )
 
-        # Create plots (don't display, just verify they work)
+        # Just verify plots can be created without error
         fig1 = plot_overall_scores_distribution(results['overall_score']['scores'])
-        print("  ✓ Overall scores distribution")
+        assert fig1 is not None
 
         fig2 = plot_metric_comparison_bars(results)
-        print("  ✓ Metric comparison bars")
+        assert fig2 is not None
 
         fig3 = plot_jerk_outliers(results['episode_results'])
-        print("  ✓ Jerk outliers plot")
+        assert fig3 is not None
 
         fig4 = plot_smoothness_comparison(results['episode_results'])
-        print("  ✓ Smoothness comparison")
-
-        print("\n✓ All visualizations generated successfully")
-
-    except Exception as e:
-        print(f"\n✗ Visualization error: {e}")
-        return False
-
-    print("\n" + "="*60)
-    print("Integration Test: PASSED ✓")
-    print("="*60 + "\n")
-
-    return True
-
-
-if __name__ == "__main__":
-    # Run integration test
-    success = run_integration_test()
-
-    # Run pytest tests
-    print("\nRunning unit tests with pytest...")
-    pytest.main([__file__, "-v", "--tb=short"])
+        assert fig4 is not None
