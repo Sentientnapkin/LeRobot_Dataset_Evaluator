@@ -1,4 +1,4 @@
-"""Test Phase 3: Spatial Coverage and Data Consistency."""
+"""Test Spatial Coverage and Data Consistency."""
 
 import numpy as np
 from pathlib import Path

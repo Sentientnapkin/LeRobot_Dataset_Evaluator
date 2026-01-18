@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(tree:*)",
+      "Bash(python test_basic.py:*)",
+      "Bash(pip install:*)",
+      "Bash(python test_smoothness_debug.py:*)",
+      "Bash(python:*)",
+      "Bash(wc:*)",
+      "Bash(tee:*)",
+      "Bash(ls:*)",
+      "Bash(streamlit run:*)",
+      "Bash(pkill:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(find:*)",
+      "Bash(ffmpeg:*)"
+    ]
+  }
+}

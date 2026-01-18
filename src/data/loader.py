@@ -119,6 +119,13 @@ class DatasetLoader:
             if self.streaming:
                 logger.info("Using streaming mode...")
 
+            if max_episodes != None:
+                self._dataset = LeRobotDataset(
+                self.dataset_id,
+                root=self.cache_dir,
+                episodes=[_ for _ in range(max_episodes)]
+            )
+
             self._dataset = LeRobotDataset(
                 self.dataset_id,
                 root=self.cache_dir
