@@ -1,6 +1,7 @@
 """LeRobot dataset loader with streaming support."""
 
 import os
+import functools
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 import numpy as np
@@ -53,6 +54,21 @@ class DatasetLoader:
         self._metadata: Optional[LeRobotDatasetMetadata] = None
 
         logger.info(f"Initialized loader for dataset: {dataset_id}")
+
+    def _get_episode_frame_indices(self, episode_index: int) -> np.ndarray:
+        """Get frame indices for a specific episode (vectorized).
+
+        Args:
+            episode_index: Episode index
+
+        Returns:
+            Array of frame indices belonging to the episode
+        """
+        if self._dataset is None:
+            self.load_dataset()
+
+        episode_indices = np.array(self._dataset.hf_dataset['episode_index'])
+        return np.where(episode_indices == episode_index)[0]
 
     def load_metadata(self) -> Dict[str, Any]:
         """Load dataset metadata without downloading full dataset.
@@ -151,13 +167,9 @@ class DatasetLoader:
         if episode_index >= self._dataset.num_episodes:
             raise ValueError(f"Episode index {episode_index} out of range (max: {self._dataset.num_episodes - 1})")
 
-        # Filter HuggingFace dataset by episode_index
+        # Filter HuggingFace dataset by episode_index (vectorized)
         hf_dataset = self._dataset.hf_dataset
-        episode_indices = hf_dataset['episode_index']
-
-        # Get frames for this episode
-        episode_mask = [idx == episode_index for idx in episode_indices]
-        episode_frames = [i for i, mask in enumerate(episode_mask) if mask]
+        episode_frames = self._get_episode_frame_indices(episode_index).tolist()
 
         if not episode_frames:
             raise ValueError(f"No frames found for episode {episode_index}")
@@ -319,19 +331,20 @@ class DatasetLoader:
 
         return stats
 
-    def get_camera_names(self) -> List[str]:
+    @functools.lru_cache(maxsize=1)
+    def get_camera_names(self) -> Tuple[str, ...]:
         """Get list of available camera names in the dataset.
 
         Returns:
-            List of camera name strings
+            Tuple of camera name strings (cached)
         """
         if self._dataset is None:
             self.load_dataset()
 
         sample = self.get_sample(0)
-        camera_keys = [k.replace('observation.images.', '')
-                      for k in sample.keys()
-                      if k.startswith('observation.images.')]
+        camera_keys = tuple(k.replace('observation.images.', '')
+                           for k in sample.keys()
+                           if k.startswith('observation.images.'))
 
         return camera_keys
 
@@ -403,12 +416,8 @@ class DatasetLoader:
         if self._dataset is None:
             self.load_dataset()
 
-        # Get frame indices for this episode
-        hf_dataset = self._dataset.hf_dataset
-        episode_indices = hf_dataset['episode_index']
-
-        episode_mask = [idx == episode_index for idx in episode_indices]
-        episode_frames = [i for i, mask in enumerate(episode_mask) if mask]
+        # Get frame indices for this episode (vectorized)
+        episode_frames = self._get_episode_frame_indices(episode_index).tolist()
 
         if not episode_frames:
             raise ValueError(f"No frames found for episode {episode_index}")
@@ -444,16 +453,7 @@ class DatasetLoader:
         Returns:
             List of global frame indices
         """
-        if self._dataset is None:
-            self.load_dataset()
-
-        hf_dataset = self._dataset.hf_dataset
-        episode_indices = hf_dataset['episode_index']
-
-        episode_mask = [idx == episode_index for idx in episode_indices]
-        episode_frames = [i for i, mask in enumerate(episode_mask) if mask]
-
-        return episode_frames
+        return self._get_episode_frame_indices(episode_index).tolist()
 
     @property
     def num_episodes(self) -> int:
